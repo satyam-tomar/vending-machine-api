@@ -71,30 +71,40 @@ def update_item_price(db: Session, item_id: str, price: int) -> None:
     item = get_item_by_id(db, item_id)
     if not item:
         raise ValueError("item_not_found")
-    prev_updated = item.updated_at
+    
+    # SQLAlchemy/Postgres usually handles updated_at automatically,
+    # prev_updated = item.updated_at
     item.price = price
-    item.updated_at = prev_updated
+    # item.updated_at = prev_updated
     db.commit()
 
 
 def remove_item_quantity(
     db: Session, slot_id: str, item_id: str, quantity: int | None
 ) -> None:
-    slot = db.query(Slot).filter(Slot.id == slot_id).first()
-    if not slot:
-        raise ValueError("slot_not_found")
     item = db.query(Item).filter(Item.id == item_id, Item.slot_id == slot_id).first()
     if not item:
+        slot_exists = db.query(Slot).filter(Slot.id == slot_id).first()
+        if not slot_exists:
+            raise ValueError("slot_not_found")
         raise ValueError("item_not_found")
-    if quantity is not None:
-        to_remove = min(quantity, item.quantity)
-        item.quantity -= to_remove
-        slot.current_item_count -= to_remove
-        if item.quantity <= 0:
-            db.delete(item)
-    else:
-        slot.current_item_count -= item.quantity
+
+    if quantity is None:
+        reduction_amount = item.quantity
         db.delete(item)
+    
+    else:
+        if quantity <= 0:
+            raise ValueError("quantity_must_be_positive")
+        elif quantity > item.quantity:
+            raise ValueError("quantity_exceeds_available")
+            
+        reduction_amount = quantity
+        if quantity == item.quantity:
+            db.delete(item)
+        else:
+            item.quantity -= quantity
+    item.slot.current_item_count -= reduction_amount
     db.commit()
 
 

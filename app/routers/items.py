@@ -68,6 +68,10 @@ def remove_item_from_slot(
             _slot_404()
         if str(e) == "item_not_found":
             _item_404()
+        if str(e) == "quantity_must_be_positive":
+            raise HTTPException(status_code=404, detail="Quantity is negative or zero")
+        if str(e) == "quantity_exceeds_available": 
+            raise HTTPException(status_code=400, detail="Quantity is exceeds the capacity")
         raise
 
 
