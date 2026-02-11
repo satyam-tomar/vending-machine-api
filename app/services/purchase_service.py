@@ -5,39 +5,31 @@ from sqlalchemy.exc import SQLAlchemyError
 from app.config import settings
 from app.models import Item
 
-
 def purchase(db: Session, item_id: str, cash_inserted: int) -> dict:
-    item = (
-        db.query(Item)
-        .filter(Item.id == item_id)
-        .with_for_update()
-        .first()
-    )
+    with db.begin():
+        item = (
+            db.query(Item)
+            .filter(Item.id == item_id)
+            .with_for_update()
+            .first()
+        )
 
-    if not item:
-        raise ValueError("item_not_found")
+        if not item:
+            raise ValueError("item_not_found")
 
-    if cash_inserted <= 0:
-        raise ValueError("invalid_cash")
+        time.sleep(0.05)  # demo: widens race window for concurrent purchase/restock
 
-    if item.quantity <= 0:
-        raise ValueError("out_of_stock")
+        if item.quantity <= 0:
+            raise ValueError("out_of_stock")
 
-    if cash_inserted < item.price:
-        raise ValueError("insufficient_cash", item.price, cash_inserted)
+        if cash_inserted < item.price:
+            raise ValueError("insufficient_cash", item.price, cash_inserted)
 
-    change = cash_inserted - item.price
-    item.quantity -= 1
-    
-    if item.slot:
+        change = cash_inserted - item.price
+        item.quantity -= 1
         item.slot.current_item_count -= 1
 
-    try:
-        db.commit()
-        db.refresh(item)
-    except Exception:
-        db.rollback()
-        raise
+    db.refresh(item)
 
     return {
         "item": item.name,
