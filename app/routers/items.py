@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -45,7 +45,12 @@ def update_item_price(
     except ValueError as e:
         if str(e) == "item_not_found":
             _item_404()
-        raise
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to update price"
+        )
+
 
 
 @router.delete("/slots/{slot_id}/items/{item_id}", response_model=MessageResponse)
