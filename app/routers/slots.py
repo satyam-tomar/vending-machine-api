@@ -105,7 +105,11 @@ def add_item_to_slot(slot_id: str, data: ItemCreate, db: Session = Depends(get_d
                 status_code=400,
                 detail="Total items would exceed slot capacity",
             )
-        raise
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to add items to slot"
+        )
 
 
 @router.post("/slots/{slot_id}/items/bulk", response_model=BulkAddResponse)
@@ -122,7 +126,11 @@ def bulk_add_items(slot_id: str, body: ItemBulkRequest, db: Session = Depends(ge
                 status_code=400,
                 detail="Total items would exceed slot capacity",
             )
-        raise 
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to add bulk items"
+        )
 
 
 @router.get("/slots/{slot_id}/items", response_model=list[ItemResponse])
@@ -136,4 +144,8 @@ def list_slot_items(slot_id: str, db: Session = Depends(get_db)):
     except ValueError as e:
         if str(e) == "slot_not_found":
             _slot_404()
-        raise
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to list items"
+        )
