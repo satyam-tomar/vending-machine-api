@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.db import get_db
@@ -65,9 +65,27 @@ def delete_slot(slot_id: str, db: Session = Depends(get_db)):
         return MessageResponse(message="Slot removed successfully")
     except ValueError as e:
         if str(e) == "slot_not_found":
-            _slot_404()
-        raise
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Slot not found"
+            )
 
+        if str(e) == "slot_not_empty":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Slot is not empty"
+            )
+
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid slot operation"
+        )
+
+    except Exception:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to delete slot"
+        )
 
 @router.post("/slots/{slot_id}/items", response_model=ItemResponse, status_code=201)
 def add_item_to_slot(slot_id: str, data: ItemCreate, db: Session = Depends(get_db)):
@@ -96,14 +114,15 @@ def bulk_add_items(slot_id: str, body: ItemBulkRequest, db: Session = Depends(ge
         added = item_service.bulk_add_items(db, slot_id, body.items)
         return BulkAddResponse(added_count=added)
     except ValueError as e:
-        if str(e) == "slot_not_found":
+        error_msg = str(e)
+        if error_msg == "slot_not_found":
             _slot_404()
-        if str(e) == "capacity_exceeded":
+        if error_msg == "capacity_exceeded":
             raise HTTPException(
                 status_code=400,
                 detail="Total items would exceed slot capacity",
             )
-        raise
+        raise 
 
 
 @router.get("/slots/{slot_id}/items", response_model=list[ItemResponse])
