@@ -7,45 +7,46 @@ from app.models import Item
 
 
 def purchase(db: Session, item_id: str, cash_inserted: int) -> dict:
+    item = (
+        db.query(Item)
+        .filter(Item.id == item_id)
+        .with_for_update()
+        .first()
+    )
+
+    if not item:
+        raise ValueError("item_not_found")
+
+    if cash_inserted <= 0:
+        raise ValueError("invalid_cash")
+
+    if item.quantity <= 0:
+        raise ValueError("out_of_stock")
+
+    if cash_inserted < item.price:
+        raise ValueError("insufficient_cash", item.price, cash_inserted)
+
+    change = cash_inserted - item.price
+    item.quantity -= 1
+    
+    if item.slot:
+        item.slot.current_item_count -= 1
+
     try:
-        with db.begin():
-
-            item = (
-                db.query(Item)
-                .filter(Item.id == item_id)
-                .with_for_update()
-                .first()
-            )
-
-            if not item:
-                raise ValueError("item_not_found")
-
-            if cash_inserted <= 0:
-                raise ValueError("invalid_cash")
-
-            if item.quantity <= 0:
-                raise ValueError("out_of_stock")
-
-            if cash_inserted < item.price:
-                raise ValueError("insufficient_cash")
-
-            change = cash_inserted - item.price
-
-            item.quantity -= 1
-            item.slot.current_item_count -= 1
-
-        return {
-            "item": item.name,
-            "price": item.price,
-            "cash_inserted": cash_inserted,
-            "change_returned": change,
-            "remaining_quantity": item.quantity,
-            "message": "Purchase successful",
-        }
-
+        db.commit()
+        db.refresh(item)
     except Exception:
         db.rollback()
         raise
+
+    return {
+        "item": item.name,
+        "price": item.price,
+        "cash_inserted": cash_inserted,
+        "change_returned": change,
+        "remaining_quantity": item.quantity,
+        "message": "Purchase successful",
+    }
 
 def change_breakdown(change: int) -> dict:
     denominations = sorted(settings.SUPPORTED_DENOMINATIONS, reverse=True)
