@@ -1,5 +1,6 @@
 import time
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.config import settings
 from app.models import Item, Slot
@@ -103,19 +104,50 @@ def remove_item_quantity(
 def bulk_remove_items(
     db: Session, slot_id: str, item_ids: list[str] | None
 ) -> None:
-    slot = db.query(Slot).filter(Slot.id == slot_id).first()
-    if not slot:
-        raise ValueError("slot_not_found")
-    if item_ids is not None and len(item_ids) > 0:
-        items = db.query(Item).filter(
-            Item.slot_id == slot_id,
-            Item.id.in_(item_ids),
-        ).all()
-        for item in items:
-            slot.current_item_count -= item.quantity
-            db.delete(item)
-    else:
-        for item in list(slot.items):
-            slot.current_item_count -= item.quantity
-            db.delete(item)
-    db.commit()
+    try:
+        with db.begin():
+
+            slot = (
+                db.query(Slot)
+                .filter(Slot.id == slot_id)
+                .with_for_update()
+                .first()
+            )
+
+            if not slot:
+                raise ValueError("slot_not_found")
+
+            if item_ids is not None:
+                if not item_ids:
+                    return 
+
+                unique_ids = set(item_ids)
+
+                items = (
+                    db.query(Item)
+                    .filter(
+                        Item.slot_id == slot_id,
+                        Item.id.in_(unique_ids),
+                    )
+                    .all()
+                )
+
+                if len(items) != len(unique_ids):
+                    raise ValueError("one_or_more_items_not_found")
+
+            else:
+                items = list(slot.items)
+
+            total_removed = sum(item.quantity for item in items)
+
+            if total_removed > slot.current_item_count:
+                raise ValueError("slot_count_inconsistent")
+
+            for item in items:
+                db.delete(item)
+
+            slot.current_item_count -= total_removed
+
+    except Exception:
+        db.rollback()
+        raise

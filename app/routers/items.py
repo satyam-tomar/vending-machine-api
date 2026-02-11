@@ -82,10 +82,37 @@ def bulk_remove_items(
     db: Session = Depends(get_db),
 ):
     item_ids = body.item_ids if body else None
+
     try:
         item_service.bulk_remove_items(db, slot_id, item_ids)
-        return MessageResponse(message="Slot cleared successfully")
+
+        if item_ids is None:
+            return MessageResponse(message="Slot cleared successfully")
+
+        if not item_ids:
+            return MessageResponse(message="No items removed")
+
+        return MessageResponse(message="Item(s) removed successfully")
+
     except ValueError as e:
-        if str(e) == "slot_not_found":
+        error = str(e)
+
+        if error == "slot_not_found":
             _slot_404()
-        raise
+
+        if error == "one_or_more_items_not_found":
+            raise HTTPException(
+                status_code=404,
+                detail="One or more items not found in this slot",
+            )
+
+        if error == "slot_count_inconsistent":
+            raise HTTPException(
+                status_code=409,
+                detail="Slot item count is inconsistent",
+            )
+
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid request",
+        )
