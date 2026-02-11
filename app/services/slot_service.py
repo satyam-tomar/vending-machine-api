@@ -1,4 +1,4 @@
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session,selectinload
 
 from app.config import settings
 from app.models import Slot
@@ -44,10 +44,13 @@ def delete_slot(db: Session, slot_id: str) -> None:
 
 
 def get_full_view(db: Session) -> list[SlotFullView]:
-    slots = db.query(Slot).all()
+    slots = (
+        db.query(Slot)
+        .options(selectinload(Slot.items))
+        .all()
+    )
     result = []
     for slot in slots:
-        # slot.items loaded per slot (N+1)
         items = [
             SlotFullViewItem(
                 id=item.id,
