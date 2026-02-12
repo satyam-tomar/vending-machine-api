@@ -1,4 +1,5 @@
 from pydantic import BaseModel, Field
+from typing import Optional
 
 
 # --- Slot ---
@@ -105,7 +106,7 @@ class BulkAddResponse(BaseModel):
 
 
 class BulkRemoveBody(BaseModel):
-    item_ids: list[str] | None = None
+    item_ids: Optional[list[str]] = None
 
 
 # --- Change breakdown (bonus) ---

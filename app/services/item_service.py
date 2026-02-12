@@ -26,35 +26,42 @@ def add_item_to_slot(db: Session, slot_id: str, data: ItemCreate) -> Item:
     db.refresh(item)
     return item
 
-
 def bulk_add_items(db: Session, slot_id: str, entries: list[ItemBulkEntry]) -> int:
-    slot = db.query(Slot).filter(Slot.id == slot_id).first()
-    if not slot:
-        raise ValueError("slot_not_found")
+    try:
+        with db.begin():
+            slot = (
+                db.query(Slot)
+                .filter(Slot.id == slot_id)
+                .with_for_update()
+                .first()
+            )
+            if not slot:
+                raise ValueError("slot_not_found")
 
-    incoming_quantity = sum(e.quantity for e in entries if e.quantity > 0)
+            incoming_quantity = sum(e.quantity for e in entries if e.quantity > 0)
 
-    if slot.current_item_count + incoming_quantity > slot.capacity:
-        raise ValueError("capacity_exceeded")
+            if slot.current_item_count + incoming_quantity > slot.capacity:
+                raise ValueError("capacity_exceeded")
 
-    added_count = 0
-    for e in entries:
-        if e.quantity <= 0:
-            continue
-        
-        item = Item(
-            name=e.name, 
-            price=e.price, 
-            slot_id=slot_id, 
-            quantity=e.quantity
-        )
-        db.add(item)
-        
-        slot.current_item_count += e.quantity
-        added_count += 1
+            added_count = 0
+            for e in entries:
+                if e.quantity <= 0:
+                    continue
 
-    db.commit()
-    return added_count
+                db.add(Item(
+                    name=e.name,
+                    price=e.price,
+                    slot_id=slot_id,
+                    quantity=e.quantity
+                ))
+
+                slot.current_item_count += e.quantity
+                added_count += 1
+
+        return added_count
+
+    except SQLAlchemyError:
+        raise
 
 
 def list_items_by_slot(db: Session, slot_id: str) -> list[Item]:
@@ -83,10 +90,21 @@ def update_item_price(db: Session, item_id: str, price: int) -> None:
 def remove_item_quantity(
     db: Session, slot_id: str, item_id: str, quantity: int | None
 ) -> None:
-    slot = db.query(Slot).filter(Slot.id == slot_id).first()
+    slot = (
+        db.query(Slot)
+        .filter(Slot.id == slot_id)
+        .with_for_update()
+        .first()
+    )
     if not slot:
         raise ValueError("slot_not_found")
-    item = db.query(Item).filter(Item.id == item_id, Item.slot_id == slot_id).first()
+
+    item = (
+        db.query(Item)
+        .filter(Item.id == item_id, Item.slot_id == slot_id)
+        .with_for_update()
+        .first()
+    )
     if not item:
         raise ValueError("item_not_found")
     if quantity is not None:
